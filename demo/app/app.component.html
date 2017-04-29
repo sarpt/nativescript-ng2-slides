@@ -1,4 +1,7 @@
-<slides [loop]="true">
+<slides 
+    (changed)="changedHandler($event)"
+    [loop]="true"
+>
     <slide class="slide-1">
         <Label text="This is Panel 1"></Label>
     </slide>
@@ -13,5 +16,8 @@
     </slide>
     <slide class="slide-5">
         <Label text="This is Panel 5"></Label>
+    </slide>
+    <slide *ngFor="let panel of dynamicPanels" class="slide-{{panel}}">
+        <Label text="This is DynPanel {{panel}}"></Label>
     </slide>
 </slides>

@@ -1,4 +1,4 @@
-<slides loop="true" pageIndicators="true">
+<slides (changed)="changedSlide($event)" loop="true" pageIndicators="true">
     <slide class="slide-1">
         <Label text="Slide 1" textWrap="true"></Label>
     </slide>
@@ -7,5 +7,8 @@
     </slide>
     <slide class="slide-3">
         <Label text="Slide 3" textWrap="true"></Label>
+    </slide>
+    <slide *ngFor="let panel of dynPanels" class="slide-{{panel}}">
+        <Label text="DynSlide {{panel}}" textWrap="true"></Label>
     </slide>
 </slides>

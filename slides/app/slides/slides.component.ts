@@ -1,4 +1,4 @@
-import { Component, OnInit, AfterViewInit, ViewEncapsulation, ChangeDetectorRef, OnDestroy, forwardRef, ViewChild, ContentChildren, ElementRef, QueryList, Input } from '@angular/core';
+import { Component, OnInit, AfterViewInit, ViewEncapsulation, ChangeDetectorRef, OnDestroy, forwardRef, ViewChild, ContentChildren, ElementRef, QueryList, Input, EventEmitter, Output } from '@angular/core';
 
 import { SlideComponent } from '../slide/slide.component';
 import * as gestures from 'ui/gestures';
@@ -19,6 +19,21 @@ export interface ISlideMap {
 	index: number;
 	left?: ISlideMap;
 	right?: ISlideMap;
+}
+
+export interface IStartEvent {
+  currentIndex: number;
+}
+
+export interface IChangedEvent {
+	direction: direction; 
+	newIndex: number;
+	oldIndex: number
+}
+
+export interface ICancelledEvent {
+	currentIndex: number;
+	reason: cancellationReason
 }
 
 enum direction {
@@ -58,12 +73,16 @@ enum cancellationReason {
 })
 
 export class SlidesComponent implements OnInit {
-	@ContentChildren(forwardRef(() => SlideComponent)) slides: QueryList<SlideComponent>;
+	@ContentChildren(SlideComponent, {descendants: true}) slides: QueryList<SlideComponent>;
 	@ViewChild('footer') footer: ElementRef;
 	@Input('pageWidth') pageWidth: number;
 	@Input('pageHeight') pageHeight: number;
 	@Input('loop') loop: boolean;
 	@Input('pageIndicators') pageIndicators: boolean;
+	@Output('start') startEvent = new EventEmitter();
+	@Output('changed') changedEvent = new EventEmitter();
+	@Output('cancelled') cancelledEvent = new EventEmitter();
+	@Output('finished') finishedEvent = new EventEmitter();
 
 	private transitioning: boolean;
 	private direction: direction = direction.none;
@@ -88,30 +107,37 @@ export class SlidesComponent implements OnInit {
 		this.pageIndicators = this.pageIndicators ? this.pageIndicators : false;
 		this.pageWidth = this.pageWidth ? this.pageWidth : platform.screen.mainScreen.widthDIPs;
 		this.pageHeight = this.pageHeight ? this.pageHeight : platform.screen.mainScreen.heightDIPs;
+
 	}
 
 	ngAfterViewInit() {
+		this.constructSlides(this.slides);
+		this.slides.changes.subscribe((slides) => {
+			this.constructSlides(slides);	
+		});
+	}
+
+	ngOnDestroy() {
+	}
+
+	private constructSlides(slides) {
 		// loop through slides and setup height and widith
-		this.slides.forEach((slide: SlideComponent) => {
+		slides.forEach((slide: SlideComponent) => {
 			AbsoluteLayout.setLeft(slide.layout, this.pageWidth);
 			slide.slideWidth = this.pageWidth;
 			slide.slideHeight = this.pageHeight;
 		});
 
-		this.currentSlide = this.buildSlideMap(this.slides.toArray());
+		this.currentSlide = this.buildSlideMap(slides.toArray());
 
 		if (this.pageIndicators) {
-			this.buildFooter(this.slides.length);
+			this.buildFooter(slides.length);
 			this.setActivePageIndicator(0);
 		}
 		if (this.currentSlide) {
 			this.positionSlides(this.currentSlide);
 			this.applySwipe(this.pageWidth);
 		}
-	}
-
-	ngOnDestroy() {
-
 	}
 
 	//footer stuff
@@ -124,13 +150,7 @@ export class SlidesComponent implements OnInit {
 		footerSection.horizontalAlignment = 'center';
 
 		if (app.ios) {
-<<<<<<< HEAD
 			footerSection.clipToBounds = false;
-=======
-		    footerSection.clipToBounds = false;
-		} else if (app.android) {
-			footerSection.android.getParent().setClipChildren(false);
->>>>>>> origin/master
 		}
 
 		footerSection.orientation = 'horizontal';
@@ -243,7 +263,7 @@ export class SlidesComponent implements OnInit {
 				previousDelta = 0;
 				endingVelocity = 250;
 
-				//this.triggerStartEvent();
+				this.triggerStartEvent();
 			} else if (args.state === gestures.GestureStateTypes.ended) {
 				deltaTime = Date.now() - startTime;
 				// if velocityScrolling is enabled then calculate the velocitty
@@ -255,12 +275,12 @@ export class SlidesComponent implements OnInit {
 						this.showLeftSlide(this.currentSlide, args.deltaX, endingVelocity).then(() => {
 							this.setupPanel(this.currentSlide.left);
 
-							//this.triggerChangeEventLeftToRight();
+							this.triggerChangeEventLeftToRight();
 						});
 					} else {
 						//We're at the start
 						//Notify no more slides
-						//this.triggerCancelEvent(cancellationReason.noPrevSlides);
+						this.triggerCancelEvent(cancellationReason.noPrevSlides);
 					}
 					return;
 				}
@@ -272,27 +292,23 @@ export class SlidesComponent implements OnInit {
 							this.setupPanel(this.currentSlide.right);
 
 							// Notify changed
-							//this.triggerChangeEventRightToLeft();
+							this.triggerChangeEventRightToLeft();
 
 							if (!this.hasNext) {
-								// Notify finsihed
-								// this.notify({
-								// 	eventName: SlideContainer.FINISHED_EVENT,
-								// 	object: this
-								// });
+								this.triggerFinishEvent();
 							}
 						});
 					} else {
 						// We're at the end
 						// Notify no more slides
-						//this.triggerCancelEvent(cancellationReason.noMoreSlides);
+						this.triggerCancelEvent(cancellationReason.noMoreSlides);
 					}
 					return;
 				}
 
 				if (this.transitioning === false) {
 					//Notify cancelled
-					//this.triggerCancelEvent(cancellationReason.user);
+					this.triggerCancelEvent(cancellationReason.user);
 					this.transitioning = true;
 					this.currentSlide.slide.layout.animate({
 						translate: { x: -this.pageWidth, y: 0 },
@@ -379,31 +395,64 @@ export class SlidesComponent implements OnInit {
 
 	public nextSlide(): void {
 		if (!this.hasNext) {
-			//this.triggerCancelEvent(cancellationReason.noMoreSlides);
+			this.triggerCancelEvent(cancellationReason.noMoreSlides);
 			return;
 		}
 
 		this.direction = direction.left;
 		this.transitioning = true;
-		//	this.triggerStartEvent();
+		this.triggerStartEvent();
 		this.showRightSlide(this.currentSlide).then(() => {
 			this.setupPanel(this.currentSlide.right);
-			//this.triggerChangeEventRightToLeft();
+			this.triggerChangeEventRightToLeft();
 		});
 	}
 	public previousSlide(): void {
 		if (!this.hasPrevious) {
-			//this.triggerCancelEvent(cancellationReason.noPrevSlides);
+			this.triggerCancelEvent(cancellationReason.noPrevSlides);
 			return;
 		}
 
 		this.direction = direction.right;
 		this.transitioning = true;
-		//this.triggerStartEvent();
+		this.triggerStartEvent();
 		this.showLeftSlide(this.currentSlide).then(() => {
 			this.setupPanel(this.currentSlide.left);
 
-			//this.triggerChangeEventLeftToRight();
+			this.triggerChangeEventLeftToRight();
 		});
+	}
+
+	public triggerStartEvent(): void {
+		this.startEvent.emit({
+			currentIndex: this.currentSlide.index
+		});
+	}
+
+	public triggerChangeEventLeftToRight(): void {
+		this.changedEvent.emit({
+			direction: direction.left,
+			newIndex: this.currentSlide.index,
+			oldIndex: this.currentSlide.index + 1
+		});
+	}
+
+	public triggerChangeEventRightToLeft(): void {
+		this.changedEvent.emit({
+			direction: direction.right,
+			newIndex: this.currentSlide.index,
+			oldIndex: this.currentSlide.index - 1
+		});
+	}
+
+	public triggerCancelEvent(cancelReason: cancellationReason): void {
+		this.cancelledEvent.emit({
+			currentIndex: this.currentSlide.index,
+			reason: cancelReason
+		});
+	}
+
+	public triggerFinishEvent(): void {
+		this.finishedEvent.emit();
 	}
 }
